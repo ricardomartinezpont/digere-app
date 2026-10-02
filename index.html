@@ -148,16 +148,23 @@ function reSignIn(){
 }
 
 /* === API === */
-async function api(action,params){
-  const payload=JSON.stringify({action,token:_token,params:params||{}});
-  const url=API_URL+'?d='+encodeURIComponent(payload);
-  const resp=await fetch(url);
-  const text=await resp.text();
-  let data;
-  try{data=JSON.parse(text);}catch(e){throw new Error('Error de servidor.');}
-  if(data.error==='TOKEN_EXPIRED'){reSignIn();throw new Error('Sesión expirada.');}
-  if(data.error)throw new Error(data.error);
-  return data;
+function api(action,params){
+  return new Promise(function(resolve,reject){
+    var cbName='_cb'+Math.random().toString(36).substr(2,8);
+    var timeout=setTimeout(function(){delete window[cbName];reject(new Error('Timeout de conexión.'));},30000);
+    window[cbName]=function(data){
+      clearTimeout(timeout);delete window[cbName];
+      if(data.error==='TOKEN_EXPIRED'){reSignIn();reject(new Error('Sesión expirada.'));return;}
+      if(data.error){reject(new Error(data.error));return;}
+      resolve(data);
+    };
+    var payload=encodeURIComponent(JSON.stringify({action:action,token:_token,params:params||{}}));
+    var s=document.createElement('script');
+    s.src=API_URL+'?d='+payload+'&cb='+cbName;
+    s.onerror=function(){clearTimeout(timeout);delete window[cbName];reject(new Error('Error de conexión.'));};
+    document.head.appendChild(s);
+    s.onload=function(){document.head.removeChild(s);};
+  });
 }
 
 /* === LOAD APP === */
